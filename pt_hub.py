@@ -12,6 +12,7 @@ import glob
 import bisect
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, filedialog, messagebox
@@ -271,7 +272,7 @@ class NeuralSignalTile(ttk.Frame):
 # -----------------------------
 
 DEFAULT_SETTINGS = {
-    "main_neural_dir": r"C:\PowerTrader_AI",
+    "main_neural_dir": "./PowerTrader_AI",
     "coins": ["BTC", "ETH", "XRP", "BNB", "DOGE"],
     "default_timeframe": "1hour",
     "timeframes": [
@@ -419,26 +420,27 @@ def build_coin_folders(main_dir: str, coins: List[str]) -> Dict[str, str]:
     Returns { "BTC": "...", "ETH": "...", ... }
     """
     out: Dict[str, str] = {}
-    main_dir = main_dir or os.getcwd()
+    # Normalize to Path
+    md = Path(main_dir) if main_dir else Path.cwd()
 
     # BTC folder
-    out["BTC"] = main_dir
+    out["BTC"] = str(md)
 
     # Auto-detect subfolders
-    if os.path.isdir(main_dir):
-        for name in os.listdir(main_dir):
-            p = os.path.join(main_dir, name)
-            if not os.path.isdir(p):
+    if md.is_dir():
+        for p in md.iterdir():
+            if not p.is_dir():
                 continue
+            name = p.name
             sym = name.upper().strip()
             if sym in coins and sym != "BTC":
-                out[sym] = p
+                out[sym] = str(p)
 
     # Fallbacks for missing ones
     for c in coins:
         c = c.upper().strip()
         if c not in out:
-            out[c] = os.path.join(main_dir, c)  # best-effort fallback
+            out[c] = str(md / c)  # best-effort fallback
 
     return out
 
@@ -1821,26 +1823,26 @@ class PowerTraderHub(tk.Tk):
         """
         try:
             coins = [str(c).strip().upper() for c in (self.settings.get("coins") or []) if str(c).strip()]
-            main_dir = (self.settings.get("main_neural_dir") or self.project_dir or os.getcwd()).strip()
+            main_dir = Path(self.settings.get("main_neural_dir") or self.project_dir or os.getcwd())
 
             trainer_name = os.path.basename(str(self.settings.get("script_neural_trainer", "neural_trainer.py")))
 
             # Source trainer: MAIN folder (BTC folder)
-            src_main_trainer = os.path.join(main_dir, trainer_name)
+            src_main_trainer = main_dir / trainer_name
 
             # Best-effort fallback if the main folder doesn't have it (keeps behavior robust)
             src_cfg_trainer = str(self.settings.get("script_neural_trainer", trainer_name))
-            src_trainer_path = src_main_trainer if os.path.isfile(src_main_trainer) else src_cfg_trainer
+            src_trainer_path = str(src_main_trainer) if src_main_trainer.is_file() else src_cfg_trainer
 
             for coin in coins:
                 if coin == "BTC":
                     continue  # BTC uses main folder; no per-coin folder needed
 
-                coin_dir = os.path.join(main_dir, coin)
+                coin_dir = main_dir / coin
 
                 created = False
-                if not os.path.isdir(coin_dir):
-                    os.makedirs(coin_dir, exist_ok=True)
+                if not coin_dir.is_dir():
+                    coin_dir.mkdir(parents=True, exist_ok=True)
                     created = True
 
                 # Only copy into folders created at startup (per your request)

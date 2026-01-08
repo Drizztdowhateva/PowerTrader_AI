@@ -13,6 +13,7 @@ from colorama import Fore, Style
 import traceback
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
+from pathlib import Path
 
 # -----------------------------
 # GUI HUB OUTPUTS
@@ -120,35 +121,37 @@ base_paths = {"BTC": main_dir}
 
 _last_settings_mtime = None
 
+
 def _refresh_paths_and_symbols():
-	"""
-	Hot-reload coins + main_neural_dir while trader is running.
-	Updates globals: crypto_symbols, main_dir, base_paths
-	"""
-	global crypto_symbols, main_dir, base_paths, _last_settings_mtime
+    """
+    Hot-reload coins + main_neural_dir while trader is running.
+    Updates globals: crypto_symbols, main_dir, base_paths
+    """
+    global crypto_symbols, main_dir, base_paths, _last_settings_mtime
 
-	s = _load_gui_settings()
-	mtime = s.get("mtime", None)
+    s = _load_gui_settings()
+    mtime = s.get("mtime", None)
 
-	# If settings file doesn't exist, keep current defaults
-	if mtime is None:
-		return
+    # If settings file doesn't exist, keep current defaults
+    if mtime is None:
+        return
 
-	if _last_settings_mtime == mtime:
-		return
+    if _last_settings_mtime == mtime:
+        return
 
-	_last_settings_mtime = mtime
+    _last_settings_mtime = mtime
 
-	coins = s.get("coins") or list(crypto_symbols)
-	mndir = s.get("main_neural_dir") or main_dir
+    coins = s.get("coins") or list(crypto_symbols)
+    mndir_candidate = s.get("main_neural_dir") or main_dir
 
-	# Keep it safe if folder isn't real on this machine
-	if not os.path.isdir(mndir):
-		mndir = os.getcwd()
+    # Normalize to Path and keep it safe if folder isn't real on this machine
+    mndir_path = Path(mndir_candidate)
+    if not mndir_path.is_dir():
+        mndir_path = Path(os.getcwd())
 
-	crypto_symbols = list(coins)
-	main_dir = mndir
-	base_paths = _build_base_paths(main_dir, crypto_symbols)
+    crypto_symbols = list(coins)
+    main_dir = str(mndir_path)
+    base_paths = _build_base_paths(main_dir, crypto_symbols)
 
 
 #API STUFF

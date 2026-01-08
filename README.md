@@ -60,7 +60,7 @@ IMPORTANT: This software places real trades automatically. You are responsible f
 ## Step 2 — Download PowerTrader AI
 
 1. Do not download the zip file of the repo! There is an issue I have to fix.
-2. Create a folder on your computer, like: `C:\PowerTraderAI\`
+2. Create a folder on your computer, like: `PowerTraderAI/` (Linux/macOS) or `C:\PowerTraderAI\` (Windows)
 3. On the PowerTrader_AI repo page, go to the code page for pt_hub.py, click the "Download Raw File" button, save it into the folder you just created.
 4. Repeat that for all files in the repo (except the readme and the license).
 
@@ -71,7 +71,7 @@ IMPORTANT: This software places real trades automatically. You are responsible f
 1. Open **Command Prompt** (Windows key → type **cmd** → Enter).
 2. Go into your PowerTrader AI folder. Example:
 
-   `cd C:\PowerTraderAI`
+   `cd PowerTraderAI` (Linux/macOS) or `cd C:\\PowerTraderAI` (Windows)
 
 3. If using Python 3.12 or higher, run this command:
 
