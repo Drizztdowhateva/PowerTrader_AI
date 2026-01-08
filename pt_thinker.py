@@ -680,12 +680,18 @@ def step_coin(sym: str):
 
 				if float(weight_list[mem_ind]) != 0.0:
 					moves.append(float(memory_pattern[len(memory_pattern) - 1]) * float(weight_list[mem_ind]))
+				else:
+					moves.append(0.0)
 
 				if float(high_weight_list[mem_ind]) != 0.0:
 					high_moves.append(high_diff * float(high_weight_list[mem_ind]))
+				else:
+					high_moves.append(0.0)
 
 				if float(low_weight_list[mem_ind]) != 0.0:
 					low_moves.append(low_diff * float(low_weight_list[mem_ind]))
+				else:
+					low_moves.append(0.0)
 
 				perfect_dexs.append(mem_ind)
 				perfect_diffs.append(diff_avg)
