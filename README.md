@@ -1,6 +1,10 @@
 # PowerTrader_AI
 Fully automated crypto trading powered by a custom price prediction AI and a structured/tiered DCA system.
 
+## Recent changes
+- Fixed trainer status updates so the hub correctly shows which coin is actively training.
+- Streamlined path handling to be cross-platform (macOS / Linux / Windows).
+
 This is my personal trading bot that I decided to make open source. I made this strategy to match my personal goals. This system is meant to be a foundation/framework for you to build your dream bot!
 
 I know there are "commonly essential" trading features that are missing (like no stop loss for example). This is by design.
