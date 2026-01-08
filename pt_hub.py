@@ -4513,6 +4513,7 @@ class PowerTraderHub(tk.Tk):
         chart_refresh_var = tk.StringVar(value=str(self.settings["chart_refresh_seconds"]))
         candles_limit_var = tk.StringVar(value=str(self.settings["candles_limit"]))
         auto_start_var = tk.BooleanVar(value=bool(self.settings.get("auto_start_scripts", False)))
+        robinhood_var = tk.BooleanVar(value=bool(self.settings.get("use_robinhood_api", True)))
         kucoin_var = tk.BooleanVar(value=bool(self.settings.get("use_kucoin_api", True)))
 
         r = 0
@@ -4576,6 +4577,14 @@ class PowerTraderHub(tk.Tk):
         def _refresh_api_status() -> None:
             key_path, secret_path = _api_paths()
             k, s = _read_api_files()
+
+            # Respect the enable checkbox in the settings dialog
+            try:
+                if not bool(robinhood_var.get()):
+                    api_status_var.set("Disabled (disabled in settings)")
+                    return
+            except Exception:
+                pass
 
             missing = []
             if not k:
@@ -5135,7 +5144,12 @@ class PowerTraderHub(tk.Tk):
             # -----------------------------
             def _refresh_kucoin_status() -> None:
                 k, s, p = _read_kucoin_files()
-                if k and s and p and bool(self.settings.get("use_kucoin_api", True)):
+                try:
+                    enabled = bool(kucoin_var.get())
+                except Exception:
+                    enabled = bool(self.settings.get("use_kucoin_api", True))
+
+                if k and s and p and enabled:
                     kucoin_status_var.set("Configured")
                 elif k or s or p:
                     kucoin_status_var.set("Partial credentials")
@@ -5247,6 +5261,13 @@ class PowerTraderHub(tk.Tk):
 
         r += 1
 
+        # Robinhood API enable/disable
+        ttk.Label(frm, text="Enable Robinhood API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
+        ttk.Checkbutton(frm, text="", variable=robinhood_var).grid(row=r, column=1, sticky="w", pady=6)
+        # duplicate: quick access to Robinhood setup next to enable checkbox
+        ttk.Button(frm, text="Setup Wizard", command=_open_robinhood_api_wizard).grid(row=r, column=2, sticky="e", padx=(8, 0))
+        r += 1
+
         # KuCoin UI row
         kucoin_status_var = tk.StringVar(value="Not configured")
         ttk.Label(frm, text="KuCoin API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
@@ -5280,6 +5301,8 @@ class PowerTraderHub(tk.Tk):
         # KuCoin API enable/disable
         ttk.Label(frm, text="Enable KuCoin API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
         ttk.Checkbutton(frm, text="", variable=kucoin_var).grid(row=r, column=1, sticky="w", pady=6)
+        # duplicate KuCoin setup wizard for quick access
+        ttk.Button(frm, text="Setup Wizard", command=_open_kucoin_api_wizard).grid(row=r, column=2, sticky="e", padx=(8, 0))
         r += 1
 
         btns = ttk.Frame(frm)
@@ -5303,6 +5326,7 @@ class PowerTraderHub(tk.Tk):
                 self.settings["candles_limit"] = int(float(candles_limit_var.get().strip()))
                 self.settings["auto_start_scripts"] = bool(auto_start_var.get())
                 self.settings["use_kucoin_api"] = bool(kucoin_var.get())
+                self.settings["use_robinhood_api"] = bool(robinhood_var.get())
                 self._save_settings()
 
                 # If new coin(s) were added and their training folder doesn't exist yet,
