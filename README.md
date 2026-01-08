@@ -1,4 +1,3 @@
-# PowerTrader_AI
 Fully automated crypto trading powered by a custom price prediction AI and a structured/tiered DCA system.
 
 ## Recent changes
@@ -162,7 +161,7 @@ A TRADE WILL START FOR A COIN IF THAT COIN REACHES A LONG LEVEL OF 3 OR HIGHER W
 1. Open **Settings**
 2. Add one new coin
 3. Save
-4. Click **Train All**, wait for training to complete
+4. Click **Train All**, wait for training to comHere is a super clean version refined without stuckplete
 5. Click **Start All**
 
 ---
@@ -184,3 +183,5 @@ PowerTrader AI is released under the **Apache 2.0** license.
 ---
 
 IMPORTANT: This software places real trades automatically. You are responsible for everything it does to your money and your account. Keep your API keys private. I am not giving financial advice. I am not responsible for any losses incurred or any security breaches to your computer (the code is entirely open source and can be confirmed non-malicious). You are fully responsible for doing your own due diligence to learn and understand this trading system and to use it properly. You are fully responsible for all of your money and all of the bot's actions, and any gains or losses.
+
+<img src="PowerTrade.png" alt="PowerTrade screenshot" width="600"/>

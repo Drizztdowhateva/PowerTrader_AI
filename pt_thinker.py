@@ -162,7 +162,13 @@ def restart_program():
 
 
 def PrintException():
+	# Ignore normal program termination (sys.exit)
 	exc_type, exc_obj, tb = sys.exc_info()
+	if exc_type is SystemExit:
+		return
+	if not tb:
+		print(f'EXCEPTION: {exc_obj}')
+		return
 
 	# walk to the innermost frame (where the error actually happened)
 	while tb and tb.tb_next:

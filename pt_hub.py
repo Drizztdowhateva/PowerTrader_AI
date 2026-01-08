@@ -1554,6 +1554,26 @@ class PowerTraderHub(tk.Tk):
         except Exception:
             pass
 
+        # Normalize stray TRAINING states left from previous runs: if a status file
+        # claims "TRAINING" but no trainer is actually running in this GUI session,
+        # default it to NOT_TRAINED so BTC doesn't incorrectly show as training.
+        try:
+            for coin in self.coins:
+                try:
+                    coin_u = (coin or "").strip().upper()
+                    folder = self.coin_folders.get(coin_u) or self.project_dir
+                    status_path = os.path.join(folder, "trainer_status.json")
+                    st = _safe_read_json(status_path)
+                    if isinstance(st, dict) and str(st.get("state", "")).upper() == "TRAINING":
+                        try:
+                            _safe_write_json(status_path, {"state": "NOT_TRAINED"})
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 
         # scripts
         self.proc_neural = ProcInfo(
@@ -1589,6 +1609,12 @@ class PowerTraderHub(tk.Tk):
 
         if bool(self.settings.get("auto_start_scripts", False)):
             self.start_all_scripts()
+
+        # F11 toggles maximize/fullscreen for convenience
+        try:
+            self.bind("<F11>", lambda _e: self._toggle_maximize())
+        except Exception:
+            pass
 
         self.after(250, self._tick)
 
@@ -1910,6 +1936,10 @@ class PowerTraderHub(tk.Tk):
         )
         m_scripts.add_command(label="Start All", command=self.start_all_scripts)
         m_scripts.add_command(label="Stop All", command=self.stop_all_scripts)
+        # Training-specific actions
+        m_scripts.add_separator()
+        m_scripts.add_command(label="Start All Training", command=self.train_all_coins)
+        m_scripts.add_command(label="Stop All Training", command=self.stop_all_trainers)
         m_scripts.add_separator()
         m_scripts.add_command(label="Start Neural Runner", command=self.start_neural)
         m_scripts.add_command(label="Stop Neural Runner", command=self.stop_neural)
@@ -3431,6 +3461,47 @@ class PowerTraderHub(tk.Tk):
             pass
 
 
+    def stop_all_trainers(self) -> None:
+        """Stop all trainer processes managed by this GUI instance (best-effort)."""
+        try:
+            for coin, lp in list(self.trainers.items()):
+                try:
+                    if lp and lp.info.proc and lp.info.proc.poll() is None:
+                        try:
+                            lp.info.proc.terminate()
+                        except Exception:
+                            pass
+
+                        # write per-coin status file marking stopped
+                        try:
+                            coin_cwd = self.coin_folders.get(coin, self.project_dir)
+                            status_path = os.path.join(coin_cwd, "trainer_status.json")
+                            from datetime import datetime
+                            st = {
+                                "state": "STOPPED",
+                                "pid": lp.info.proc.pid if lp.info.proc else None,
+                                "stop_time": datetime.utcnow().isoformat() + "Z",
+                            }
+                            try:
+                                with open(status_path, "w", encoding="utf-8") as f:
+                                    json.dump(st, f)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # refresh trainer status label
+            try:
+                running = [c for c, lp in self.trainers.items() if lp.info.proc and lp.info.proc.poll() is None]
+                self.trainer_status_lbl.config(text=f"running: {', '.join(running)}" if running else "(no trainers running)")
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+
     def stop_all_scripts(self) -> None:
         # Cancel any pending "wait for runner then start trader"
         self._auto_start_trader_pending = False
@@ -3543,6 +3614,36 @@ class PowerTraderHub(tk.Tk):
             except Exception:
                 pass
             txt.see("end")
+
+
+    def _toggle_maximize(self) -> None:
+        """Toggle window maximize/fullscreen state (bound to F11)."""
+        try:
+            # Try WM state toggling first
+            st = str(self.state() or "")
+            if st == "normal":
+                try:
+                    self.state("zoomed")
+                    return
+                except Exception:
+                    pass
+
+            if st == "zoomed":
+                try:
+                    self.state("normal")
+                    return
+                except Exception:
+                    pass
+
+            # Fallback: toggle fullscreen attribute
+            cur = bool(self.attributes("-fullscreen") if "-fullscreen" in self.attributes() else False)
+            self.attributes("-fullscreen", not cur)
+        except Exception:
+            try:
+                # best-effort fallback
+                self.attributes("-fullscreen", True)
+            except Exception:
+                pass
 
     def _tick(self) -> None:
         # process labels
@@ -5131,17 +5232,33 @@ class PowerTraderHub(tk.Tk):
                     return
 
                 _refresh_api_status()
-                messagebox.showinfo(
-                    "Saved",
-                    "✅ Saved!\n\n"
-                    "The trader will automatically read these files next time it starts:\n"
-                    f"  API Key → {_mask_path(key_path)}\n"
-                    f"  Private Key → {_mask_path(secret_path)}\n\n"
-                    "Next steps:\n"
-                    "  1) Close this window\n"
-                    "  2) Start the trader (pt_trader.py)\n"
-                    "If something fails, come back here and click 'Test Credentials'."
-                )
+                try:
+                    wiz.lift()
+                    wiz.attributes("-topmost", True)
+                except Exception:
+                    pass
+                try:
+                    messagebox.showinfo(
+                        "Saved",
+                        "✅ Saved!\n\n"
+                        "The trader will automatically read these files next time it starts:\n"
+                        f"  API Key → {_mask_path(key_path)}\n"
+                        f"  Private Key → {_mask_path(secret_path)}\n\n"
+                        "Next steps:\n"
+                        "  1) Close this window\n"
+                        "  2) Start the trader (pt_trader.py)\n"
+                        "If something fails, come back here and click 'Test Credentials'.",
+                        parent=wiz,
+                    )
+                except Exception:
+                    try:
+                        messagebox.showinfo("Saved", "✅ Saved!", parent=wiz)
+                    except Exception:
+                        pass
+                try:
+                    wiz.attributes("-topmost", False)
+                except Exception:
+                    pass
                 wiz.destroy()
 
             ttk.Button(save_btns, text="Save", command=do_save).pack(side="left")
@@ -5231,10 +5348,25 @@ class PowerTraderHub(tk.Tk):
                         with open(p_path, "w", encoding="utf-8") as f:
                             f.write((api_pass_var.get() or "").strip())
                     except Exception as e:
-                        messagebox.showerror("Save failed", f"Couldn't write the credential files.\n\nError:\n{e}")
+                        try:
+                            messagebox.showerror("Save failed", f"Couldn't write the credential files.\n\nError:\n{e}", parent=wiz)
+                        except Exception:
+                            messagebox.showerror("Save failed", f"Couldn't write the credential files.\n\nError:\n{e}")
                         return
                     _refresh_kucoin_status()
-                    messagebox.showinfo("Saved", "✅ KuCoin credentials saved to project folder.")
+                    try:
+                        wiz.lift()
+                        wiz.attributes("-topmost", True)
+                    except Exception:
+                        pass
+                    try:
+                        messagebox.showinfo("Saved", "✅ KuCoin credentials saved to project folder.", parent=wiz)
+                    except Exception:
+                        messagebox.showinfo("Saved", "✅ KuCoin credentials saved to project folder.")
+                    try:
+                        wiz.attributes("-topmost", False)
+                    except Exception:
+                        pass
                     wiz.destroy()
 
                 def do_test_kucoin():
@@ -5434,12 +5566,30 @@ class PowerTraderHub(tk.Tk):
                 # Refresh all coin-driven UI (dropdowns + chart tabs)
                 self._refresh_coin_dependent_ui(prev_coins)
 
-                messagebox.showinfo("Saved", "Settings saved.")
+                try:
+                    win.lift()
+                    win.attributes("-topmost", True)
+                except Exception:
+                    pass
+                try:
+                    messagebox.showinfo("Saved", "Settings saved.", parent=win)
+                except Exception:
+                    try:
+                        messagebox.showinfo("Saved", "Settings saved.")
+                    except Exception:
+                        pass
+                try:
+                    win.attributes("-topmost", False)
+                except Exception:
+                    pass
                 win.destroy()
 
 
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to save settings:\n{e}")
+                try:
+                    messagebox.showerror("Error", f"Failed to save settings:\n{e}", parent=win)
+                except Exception:
+                    messagebox.showerror("Error", f"Failed to save settings:\n{e}")
 
 
         ttk.Button(btns, text="Save", command=save).pack(side="left")

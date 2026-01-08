@@ -202,13 +202,19 @@ def should_stop_training(loop_i, every=50):
 		return False
 
 def PrintException():
+	# Ignore normal program termination (sys.exit)
 	exc_type, exc_obj, tb = sys.exc_info()
+	if exc_type is SystemExit:
+		return
+	if not tb:
+		print(f'EXCEPTION: {exc_obj}')
+		return
 	f = tb.tb_frame
 	lineno = tb.tb_lineno
 	filename = f.f_code.co_filename
 	linecache.checkcache(filename)
 	line = linecache.getline(filename, lineno, f.f_globals)
-	print ('EXCEPTION IN (LINE {} "{}"): {}'.format(lineno, line.strip(), exc_obj))
+	print('EXCEPTION IN (LINE {} "{}"): {}'.format(lineno, line.strip(), exc_obj))
 how_far_to_look_back = 100000
 number_of_candles = [2]
 number_of_candles_index = 0
@@ -738,13 +744,22 @@ while True:
 				import json
 				import uuid
 				def PrintException():
+					# Ignore normal program termination (sys.exit)
 					exc_type, exc_obj, tb = sys.exc_info()
+					if exc_type is SystemExit:
+						return
+					if not tb:
+						print(f'EXCEPTION: {exc_obj}')
+						return
+					# walk to the innermost frame (where the error actually happened)
+					while tb and tb.tb_next:
+						tb = tb.tb_next
 					f = tb.tb_frame
 					lineno = tb.tb_lineno
 					filename = f.f_code.co_filename
 					linecache.checkcache(filename)
 					line = linecache.getline(filename, lineno, f.f_globals)
-					print ('EXCEPTION IN (LINE {} "{}"): {}'.format(lineno, line.strip(), exc_obj))
+					print('EXCEPTION IN (LINE {} "{}"): {}'.format(lineno, line.strip(), exc_obj))
 				how_far_to_look_back = 100000
 				list_len = 0
 				if the_big_index >= len(tf_choices):
@@ -779,8 +794,7 @@ while True:
 								)
 						except Exception:
 							pass
-
-						sys.exit(0)
+							os._exit(0)
 					else:
 						the_big_index = 0
 				else:

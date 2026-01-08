@@ -182,7 +182,19 @@ class CryptoAPITrading:
         self.path_map = dict(base_paths)
 
         self.api_key = API_KEY
-        private_key_seed = base64.b64decode(BASE64_PRIVATE_KEY)
+        # Robustly decode the base64 private key: strip whitespace and fix padding
+        _b64 = (BASE64_PRIVATE_KEY or "").strip()
+        if _b64:
+            # Add padding so length is a multiple of 4
+            pad = (-len(_b64)) % 4
+            if pad:
+                _b64 = _b64 + ("=" * pad)
+        try:
+            private_key_seed = base64.b64decode(_b64)
+        except Exception as e:
+            print(f"[TRADER] Failed to decode BASE64_PRIVATE_KEY from r_secret.txt: {e}")
+            print("Check r_secret.txt — it should contain a base64-encoded seed with no extra characters.")
+            raise
         self.private_key = SigningKey(private_key_seed)
         self.base_url = "https://trading.robinhood.com"
 
