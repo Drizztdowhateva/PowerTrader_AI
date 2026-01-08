@@ -3405,6 +3405,45 @@ class PowerTraderHub(tk.Tk):
         self.stop_neural()
         self.stop_trader()
 
+        # Stop any running trainers launched by this GUI instance
+        try:
+            for coin, lp in list(self.trainers.items()):
+                try:
+                    if lp and lp.info.proc and lp.info.proc.poll() is None:
+                        try:
+                            lp.info.proc.terminate()
+                        except Exception:
+                            pass
+
+                        # write per-coin status file marking stopped
+                        try:
+                            coin_cwd = self.coin_folders.get(coin, self.project_dir)
+                            status_path = os.path.join(coin_cwd, "trainer_status.json")
+                            from datetime import datetime
+                            st = {
+                                "state": "STOPPED",
+                                "pid": lp.info.proc.pid if lp.info.proc else None,
+                                "stop_time": datetime.utcnow().isoformat() + "Z",
+                            }
+                            try:
+                                with open(status_path, "w", encoding="utf-8") as f:
+                                    json.dump(st, f)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # refresh trainer status label
+            try:
+                running = [c for c, lp in self.trainers.items() if lp.info.proc and lp.info.proc.poll() is None]
+                self.trainer_status_lbl.config(text=f"running: {', '.join(running)}" if running else "(no trainers running)")
+            except Exception:
+                pass
+        except Exception:
+            pass
+
         # Also reset the runner-ready gate file (best-effort)
         try:
             with open(self.runner_ready_path, "w", encoding="utf-8") as f:
