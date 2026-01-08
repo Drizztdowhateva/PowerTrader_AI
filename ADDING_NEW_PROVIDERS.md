@@ -277,18 +277,19 @@ def _get_trading_provider_from_settings() -> Optional['TradingProvider']:
 
 ### Data Format Standardization
 
-PowerTrader AI expects klines in this format:
+PowerTrader AI expects klines in this format (matching KuCoin's native format):
 ```python
 [
     timestamp (str),   # Unix timestamp in seconds
     open (str),        # Opening price
-    close (str),       # Closing price
+    close (str),       # Closing price (NOTE: close before high/low)
     high (str),        # Highest price
     low (str),         # Lowest price
     volume (str)       # Trading volume
 ]
 ```
 
+**Important**: The order is [timestamp, open, close, high, low, volume], which matches KuCoin's format.
 Make sure your provider converts the exchange's format to this standard.
 
 ### Symbol Format

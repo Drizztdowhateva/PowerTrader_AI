@@ -40,7 +40,8 @@ class MarketDataProvider(ABC):
             limit: Maximum number of candles to return
             
         Returns:
-            List of candles, each candle is a list: [timestamp, open, high, low, close, volume]
+            List of candles, each candle is a list: [timestamp, open, close, high, low, volume]
+            Note: This order matches KuCoin's format for consistency
         """
         pass
     
