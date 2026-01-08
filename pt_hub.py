@@ -3334,6 +3334,29 @@ class PowerTraderHub(tk.Tk):
             t.start()
 
             self.trainers[coin] = LogProc(info=info, log_q=q, thread=t, is_trainer=True, coin=coin)
+            # write a per-coin status file so other hub instances or restarts can see this trainer as running
+            try:
+                status_path = os.path.join(coin_cwd, "trainer_status.json")
+                from datetime import datetime
+                st = {
+                    "state": "TRAINING",
+                    "pid": info.proc.pid if info.proc else None,
+                    "start_time": datetime.utcnow().isoformat() + "Z",
+                }
+                try:
+                    with open(status_path, "w", encoding="utf-8") as f:
+                        json.dump(st, f)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+            # update trainer status label immediately
+            try:
+                running = [c for c, lp in self.trainers.items() if lp.info.proc and lp.info.proc.poll() is None]
+                self.trainer_status_lbl.config(text=f"running: {', '.join(running)}" if running else "(no trainers running)")
+            except Exception:
+                pass
         except Exception as e:
             messagebox.showerror("Failed to start", f"Trainer for {coin} failed to start:\n{e}")
 
@@ -3347,6 +3370,30 @@ class PowerTraderHub(tk.Tk):
             return
         try:
             lp.info.proc.terminate()
+        except Exception:
+            pass
+
+        # write a per-coin status file marking the trainer as stopped and refresh label
+        try:
+            coin_cwd = self.coin_folders.get(coin, self.project_dir)
+            status_path = os.path.join(coin_cwd, "trainer_status.json")
+            from datetime import datetime
+            st = {
+                "state": "STOPPED",
+                "pid": lp.info.proc.pid if lp.info.proc else None,
+                "stop_time": datetime.utcnow().isoformat() + "Z",
+            }
+            try:
+                with open(status_path, "w", encoding="utf-8") as f:
+                    json.dump(st, f)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        try:
+            running = [c for c, lp in self.trainers.items() if lp.info.proc and lp.info.proc.poll() is None]
+            self.trainer_status_lbl.config(text=f"running: {', '.join(running)}" if running else "(no trainers running)")
         except Exception:
             pass
 
