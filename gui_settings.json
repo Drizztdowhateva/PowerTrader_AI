@@ -28,5 +28,6 @@
   "script_neural_runner2": "pt_thinker.py",
   "script_neural_trainer": "pt_trainer.py",
   "script_trader": "pt_trader.py",
-  "auto_start_scripts": false
+  "auto_start_scripts": false,
+  "use_kucoin_api": false
 }

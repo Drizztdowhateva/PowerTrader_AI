@@ -288,6 +288,7 @@ DEFAULT_SETTINGS = {
     "script_neural_trainer": "pt_trainer.py",
     "script_trader": "pt_trader.py",
     "auto_start_scripts": False,
+    "use_kucoin_api": True,
 }
 
 
@@ -420,10 +421,17 @@ def build_coin_folders(main_dir: str, coins: List[str]) -> Dict[str, str]:
     Returns { "BTC": "...", "ETH": "...", ... }
     """
     out: Dict[str, str] = {}
-    # Normalize to Path
+    # Normalize to an absolute Path (avoid returning relative paths which later cause double-prefixing)
     md = Path(main_dir) if main_dir else Path.cwd()
+    if not md.is_absolute():
+        md = (Path.cwd() / md)
+    # Resolve without strict to avoid errors if path doesn't exist yet
+    try:
+        md = md.resolve(strict=False)
+    except Exception:
+        md = md.absolute()
 
-    # BTC folder
+    # BTC folder (absolute)
     out["BTC"] = str(md)
 
     # Auto-detect subfolders
@@ -434,13 +442,13 @@ def build_coin_folders(main_dir: str, coins: List[str]) -> Dict[str, str]:
             name = p.name
             sym = name.upper().strip()
             if sym in coins and sym != "BTC":
-                out[sym] = str(p)
+                out[sym] = str(p.resolve(strict=False))
 
     # Fallbacks for missing ones
     for c in coins:
         c = c.upper().strip()
         if c not in out:
-            out[c] = str(md / c)  # best-effort fallback
+            out[c] = str((md / c).resolve(strict=False))  # best-effort fallback (absolute)
 
     return out
 
@@ -3249,14 +3257,23 @@ class PowerTraderHub(tk.Tk):
             except Exception:
                 pass
 
-        trainer_path = os.path.join(coin_cwd, trainer_name)
+        trainer_path = os.path.abspath(os.path.join(coin_cwd, trainer_name))
 
+        # Fallback: if BTC's trainer isn't found in the main neural folder, try the project's trainer
         if not os.path.isfile(trainer_path):
-            messagebox.showerror(
-                "Missing trainer",
-                f"Cannot find trainer for {coin} at:\n{trainer_path}"
-            )
-            return
+            fallback = os.path.abspath(os.path.join(self.project_dir, trainer_name))
+            proc_trainer = getattr(self, 'proc_trainer_path', None)
+            if proc_trainer and os.path.isfile(proc_trainer):
+                fallback = proc_trainer
+
+            if os.path.isfile(fallback):
+                trainer_path = os.path.abspath(fallback)
+            else:
+                messagebox.showerror(
+                    "Missing trainer",
+                    f"Cannot find trainer for {coin} at:\n{trainer_path}"
+                )
+                return
 
         if coin in self.trainers and self.trainers[coin].info.proc and self.trainers[coin].info.proc.poll() is None:
             return
@@ -3299,8 +3316,13 @@ class PowerTraderHub(tk.Tk):
 
         try:
             # IMPORTANT: pass `coin` so neural_trainer trains the correct market instead of defaulting to BTC
+            # Prefer the project's virtualenv python if available so trainers inherit installed packages
+            python_exec = os.path.join(self.project_dir, ".venv", "bin", "python")
+            if not os.path.isfile(python_exec):
+                python_exec = sys.executable
+
             info.proc = subprocess.Popen(
-                [sys.executable, "-u", info.path, coin],
+                [python_exec, "-u", info.path, coin],
                 cwd=coin_cwd,
                 env=env,
                 stdout=subprocess.PIPE,
@@ -4355,6 +4377,7 @@ class PowerTraderHub(tk.Tk):
         chart_refresh_var = tk.StringVar(value=str(self.settings["chart_refresh_seconds"]))
         candles_limit_var = tk.StringVar(value=str(self.settings["candles_limit"]))
         auto_start_var = tk.BooleanVar(value=bool(self.settings.get("auto_start_scripts", False)))
+        kucoin_var = tk.BooleanVar(value=bool(self.settings.get("use_kucoin_api", True)))
 
         r = 0
         add_row(r, "Main neural folder:", main_dir_var, browse="dir"); r += 1
@@ -4373,6 +4396,12 @@ class PowerTraderHub(tk.Tk):
             secret_path = os.path.join(self.project_dir, "r_secret.txt")
             return key_path, secret_path
 
+        def _kucoin_paths() -> Tuple[str, str, str]:
+            key_path = os.path.join(self.project_dir, "ku_key.txt")
+            secret_path = os.path.join(self.project_dir, "ku_secret.txt")
+            pass_path = os.path.join(self.project_dir, "ku_passphrase.txt")
+            return key_path, secret_path, pass_path
+
         def _read_api_files() -> Tuple[str, str]:
             key_path, secret_path = _api_paths()
             try:
@@ -4386,6 +4415,25 @@ class PowerTraderHub(tk.Tk):
             except Exception:
                 s = ""
             return k, s
+
+        def _read_kucoin_files() -> Tuple[str, str, str]:
+            k_path, s_path, p_path = _kucoin_paths()
+            try:
+                with open(k_path, "r", encoding="utf-8") as f:
+                    k = (f.read() or "").strip()
+            except Exception:
+                k = ""
+            try:
+                with open(s_path, "r", encoding="utf-8") as f:
+                    s = (f.read() or "").strip()
+            except Exception:
+                s = ""
+            try:
+                with open(p_path, "r", encoding="utf-8") as f:
+                    p = (f.read() or "").strip()
+            except Exception:
+                p = ""
+            return k, s, p
 
         api_status_var = tk.StringVar(value="")
 
@@ -4946,6 +4994,110 @@ class PowerTraderHub(tk.Tk):
             ttk.Button(save_btns, text="Save", command=do_save).pack(side="left")
             ttk.Button(save_btns, text="Close", command=wiz.destroy).pack(side="left", padx=8)
 
+            # -----------------------------
+            # KuCoin API setup (simple wizard)
+            # -----------------------------
+            def _refresh_kucoin_status() -> None:
+                k, s, p = _read_kucoin_files()
+                if k and s and p and bool(self.settings.get("use_kucoin_api", True)):
+                    kucoin_status_var.set("Configured")
+                elif k or s or p:
+                    kucoin_status_var.set("Partial credentials")
+                else:
+                    kucoin_status_var.set("Not configured")
+
+            def _clear_kucoin_files() -> None:
+                k_path, s_path, p_path = _kucoin_paths()
+                try:
+                    for fp in (k_path, s_path, p_path):
+                        try:
+                            if os.path.isfile(fp):
+                                os.remove(fp)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                _refresh_kucoin_status()
+
+            def _open_kucoin_api_wizard() -> None:
+                try:
+                    import webbrowser
+                except Exception:
+                    webbrowser = None
+
+                try:
+                    import requests
+                except Exception:
+                    requests = None
+
+                wiz = tk.Toplevel(win)
+                wiz.title("KuCoin API Setup")
+                wiz.geometry("640x420")
+                wiz.minsize(520, 380)
+
+                frm2 = ttk.Frame(wiz, padding=12)
+                frm2.pack(fill="both", expand=True)
+
+                ttk.Label(frm2, text="Enter your KuCoin API credentials below.", justify="left").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
+                api_key_var = tk.StringVar(value="")
+                api_secret_var = tk.StringVar(value="")
+                api_pass_var = tk.StringVar(value="")
+
+                ek, es, ep = _read_kucoin_files()
+                api_key_var.set(ek)
+                api_secret_var.set(es)
+                api_pass_var.set(ep)
+
+                ttk.Label(frm2, text="API Key:").grid(row=1, column=0, sticky="w", pady=6)
+                ttk.Entry(frm2, textvariable=api_key_var, width=60).grid(row=1, column=1, columnspan=2, sticky="ew", pady=6)
+
+                ttk.Label(frm2, text="API Secret:").grid(row=2, column=0, sticky="w", pady=6)
+                ttk.Entry(frm2, textvariable=api_secret_var, width=60, show="*").grid(row=2, column=1, columnspan=2, sticky="ew", pady=6)
+
+                ttk.Label(frm2, text="Passphrase:").grid(row=3, column=0, sticky="w", pady=6)
+                ttk.Entry(frm2, textvariable=api_pass_var, width=60, show="*").grid(row=3, column=1, columnspan=2, sticky="ew", pady=6)
+
+                btns2 = ttk.Frame(frm2)
+                btns2.grid(row=4, column=0, columnspan=3, sticky="ew", pady=12)
+                btns2.columnconfigure(0, weight=1)
+
+                def do_save_kucoin():
+                    k_path, s_path, p_path = _kucoin_paths()
+                    try:
+                        with open(k_path, "w", encoding="utf-8") as f:
+                            f.write((api_key_var.get() or "").strip())
+                        with open(s_path, "w", encoding="utf-8") as f:
+                            f.write((api_secret_var.get() or "").strip())
+                        with open(p_path, "w", encoding="utf-8") as f:
+                            f.write((api_pass_var.get() or "").strip())
+                    except Exception as e:
+                        messagebox.showerror("Save failed", f"Couldn't write the credential files.\n\nError:\n{e}")
+                        return
+                    _refresh_kucoin_status()
+                    messagebox.showinfo("Saved", "✅ KuCoin credentials saved to project folder.")
+                    wiz.destroy()
+
+                def do_test_kucoin():
+                    # Simple test: try importing kucoin and make a public market call if available
+                    try:
+                        from kucoin.client import Market
+                    except Exception as e:
+                        messagebox.showerror("Missing package", "The 'kucoin-python' package isn't installed in the trainer environment.")
+                        return
+                    try:
+                        m = Market()
+                        ticks = m.get_tickers()
+                        messagebox.showinfo("Success", "Public market request succeeded (kucoin package OK).")
+                    except Exception as e:
+                        messagebox.showerror("Test failed", f"KuCoin test request failed:\n{e}")
+
+                ttk.Button(btns2, text="Save", command=do_save_kucoin).pack(side="left")
+                ttk.Button(btns2, text="Test (public)", command=do_test_kucoin).pack(side="left", padx=8)
+                ttk.Button(btns2, text="Close", command=wiz.destroy).pack(side="left", padx=8)
+
+            ttk.Label(frm, text="Robinhood API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
+
         ttk.Label(frm, text="Robinhood API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
 
         api_row = ttk.Frame(frm)
@@ -4959,6 +5111,23 @@ class PowerTraderHub(tk.Tk):
 
         r += 1
 
+        # KuCoin UI row
+        kucoin_status_var = tk.StringVar(value="Not configured")
+        ttk.Label(frm, text="KuCoin API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
+
+        ku_row = ttk.Frame(frm)
+        ku_row.grid(row=r, column=1, columnspan=2, sticky="ew", pady=6)
+        ku_row.columnconfigure(0, weight=1)
+
+        ttk.Label(ku_row, textvariable=kucoin_status_var).grid(row=0, column=0, sticky="w")
+        ttk.Button(ku_row, text="Setup Wizard", command=_open_kucoin_api_wizard).grid(row=0, column=1, sticky="e", padx=(10, 0))
+        ttk.Button(ku_row, text="Open Folder", command=lambda: _open_in_file_manager(self.project_dir)).grid(row=0, column=2, sticky="e", padx=(8, 0))
+        ttk.Button(ku_row, text="Clear", command=_clear_kucoin_files).grid(row=0, column=3, sticky="e", padx=(8, 0))
+
+        r += 1
+
+        _refresh_kucoin_status()
+
         _refresh_api_status()
 
 
@@ -4971,6 +5140,11 @@ class PowerTraderHub(tk.Tk):
 
         chk = ttk.Checkbutton(frm, text="Auto start scripts on GUI launch", variable=auto_start_var)
         chk.grid(row=r, column=0, columnspan=3, sticky="w", pady=(10, 0)); r += 1
+
+        # KuCoin API enable/disable
+        ttk.Label(frm, text="Enable KuCoin API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
+        ttk.Checkbutton(frm, text="", variable=kucoin_var).grid(row=r, column=1, sticky="w", pady=6)
+        r += 1
 
         btns = ttk.Frame(frm)
         btns.grid(row=r, column=0, columnspan=3, sticky="ew", pady=14)
@@ -4992,6 +5166,7 @@ class PowerTraderHub(tk.Tk):
                 self.settings["chart_refresh_seconds"] = float(chart_refresh_var.get().strip())
                 self.settings["candles_limit"] = int(float(candles_limit_var.get().strip()))
                 self.settings["auto_start_scripts"] = bool(auto_start_var.get())
+                self.settings["use_kucoin_api"] = bool(kucoin_var.get())
                 self._save_settings()
 
                 # If new coin(s) were added and their training folder doesn't exist yet,
