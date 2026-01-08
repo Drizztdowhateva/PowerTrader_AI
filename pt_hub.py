@@ -4023,6 +4023,31 @@ class PowerTraderHub(tk.Tk):
         except Exception:
             pass
 
+        # Ensure each coin has an initial trainer_status.json; default to NOT_TRAINED when missing
+        try:
+            for coin in self.coins:
+                try:
+                    coin_u = (coin or "").strip().upper()
+                    folder = self.coin_folders.get(coin_u) or self.coin_folders.get(coin) or self.project_dir
+                    if not folder:
+                        continue
+                    status_path = os.path.join(folder, "trainer_status.json")
+                    if not os.path.isfile(status_path):
+                        st = {"state": "NOT_TRAINED"}
+                        try:
+                            os.makedirs(folder, exist_ok=True)
+                        except Exception:
+                            pass
+                        try:
+                            with open(status_path, "w", encoding="utf-8") as f:
+                                json.dump(st, f)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         # Rebuild neural overview tiles (if the widget exists)
         try:
             if hasattr(self, "neural_wrap") and self.neural_wrap.winfo_exists():
