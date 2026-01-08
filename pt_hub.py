@@ -408,6 +408,19 @@ def _now_str() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _fmt_uptime(seconds: float) -> str:
+    try:
+        s = int(max(0, int(seconds)))
+        days, rem = divmod(s, 86400)
+        hours, rem = divmod(rem, 3600)
+        mins, secs = divmod(rem, 60)
+        if days > 0:
+            return f"{days}d {hours:02d}:{mins:02d}:{secs:02d}"
+        return f"{hours}:{mins:02d}:{secs:02d}"
+    except Exception:
+        return "N/A"
+
+
 # -----------------------------
 # Neural folder detection
 # -----------------------------
@@ -1457,6 +1470,7 @@ class ProcInfo:
     name: str
     path: str
     proc: Optional[subprocess.Popen] = None
+    start_time: Optional[float] = None
 
 
 
@@ -2226,6 +2240,10 @@ class PowerTraderHub(tk.Tk):
 
         self.lbl_last_status = ttk.Label(controls_left, text="Last status: N/A")
         self.lbl_last_status.pack(anchor="w", padx=6, pady=(0, 2))
+
+        # Trader uptime (runtime) shown below last status
+        self.lbl_trader_uptime = ttk.Label(controls_left, text="Trader uptime: N/A")
+        self.lbl_trader_uptime.pack(anchor="w", padx=6, pady=(0, 6))
 
 
         # ----------------------------
@@ -3068,6 +3086,11 @@ class PowerTraderHub(tk.Tk):
                 text=True,
                 bufsize=1,
             )
+            # record launch time for uptime display
+            try:
+                p.start_time = time.time()
+            except Exception:
+                p.start_time = None
             if log_q is not None:
                 t = threading.Thread(target=self._reader_thread, args=(p.proc, log_q, prefix), daemon=True)
                 t.start()
@@ -3080,6 +3103,10 @@ class PowerTraderHub(tk.Tk):
             return
         try:
             p.proc.terminate()
+        except Exception:
+            pass
+        try:
+            p.start_time = None
         except Exception:
             pass
 
@@ -3849,6 +3876,20 @@ class PowerTraderHub(tk.Tk):
                 self.lbl_last_status.config(text="Last status: (unknown timestamp)")
         except Exception:
             self.lbl_last_status.config(text="Last status: (timestamp parse error)")
+
+        # Update trader uptime (if we started the trader process via the hub)
+        try:
+            if self.proc_trader.proc and (self.proc_trader.proc.poll() is None) and getattr(self.proc_trader, "start_time", None):
+                elapsed = time.time() - float(self.proc_trader.start_time)
+                self.lbl_trader_uptime.config(text=f"Trader uptime: {_fmt_uptime(elapsed)}")
+            else:
+                # If trader isn't running or we don't have a start_time, indicate stopped
+                self.lbl_trader_uptime.config(text="Trader uptime: stopped")
+        except Exception:
+            try:
+                self.lbl_trader_uptime.config(text="Trader uptime: N/A")
+            except Exception:
+                pass
 
         # --- account summary (same info the trader prints above current trades) ---
         acct = data.get("account", {}) or {}
