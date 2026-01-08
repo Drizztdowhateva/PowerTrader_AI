@@ -5264,8 +5264,7 @@ class PowerTraderHub(tk.Tk):
         # Robinhood API enable/disable
         ttk.Label(frm, text="Enable Robinhood API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
         ttk.Checkbutton(frm, text="", variable=robinhood_var).grid(row=r, column=1, sticky="w", pady=6)
-        # duplicate: quick access to Robinhood setup next to enable checkbox
-        ttk.Button(frm, text="Setup Wizard", command=_open_robinhood_api_wizard).grid(row=r, column=2, sticky="e", padx=(8, 0))
+        # (single Robinhood setup wizard kept in the API row above)
         r += 1
 
         # KuCoin UI row
