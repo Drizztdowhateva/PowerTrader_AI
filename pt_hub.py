@@ -1529,6 +1529,31 @@ class PowerTraderHub(tk.Tk):
         # Rebuild folder map after potential folder creation
         self.coin_folders = build_coin_folders(self.settings["main_neural_dir"], self.coins)
 
+        # Ensure initial trainer status files exist for each coin (default NOT_TRAINED)
+        try:
+            for coin in self.coins:
+                try:
+                    coin_u = (coin or "").strip().upper()
+                    folder = self.coin_folders.get(coin_u) or self.coin_folders.get(coin) or self.project_dir
+                    if not folder:
+                        continue
+                    status_path = os.path.join(folder, "trainer_status.json")
+                    if not os.path.isfile(status_path):
+                        st = {"state": "NOT_TRAINED"}
+                        try:
+                            os.makedirs(folder, exist_ok=True)
+                        except Exception:
+                            pass
+                        try:
+                            with open(status_path, "w", encoding="utf-8") as f:
+                                json.dump(st, f)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 
         # scripts
         self.proc_neural = ProcInfo(
