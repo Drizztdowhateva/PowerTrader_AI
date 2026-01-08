@@ -29,5 +29,6 @@
   "script_neural_trainer": "pt_trainer.py",
   "script_trader": "pt_trader.py",
   "auto_start_scripts": false,
-  "use_kucoin_api": false
+  "use_kucoin_api": false,
+  "use_robinhood_api": true
 }

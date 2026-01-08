@@ -2,8 +2,6 @@ import os
 import time
 import random
 import requests
-from kucoin.client import Market
-market = Market(url='https://api.kucoin.com')
 import sys
 import datetime
 import traceback
@@ -19,6 +17,44 @@ import json
 import uuid
 
 from nacl.signing import SigningKey
+
+# Feature flag: allow the caller (GUI) to disable KuCoin usage.
+USE_KUCOIN = os.environ.get("USE_KUCOIN_API", "1").strip().lower() not in ("0", "false", "no")
+
+# Lazy-init KuCoin client; if the `kucoin` package is not installed we fall back
+# to the public REST endpoint via `requests` so the runner can run without the
+# package. This avoids ModuleNotFoundError when the GUI disables KuCoin usage.
+market = None
+if USE_KUCOIN:
+	try:
+		from kucoin.client import Market
+		market = Market(url='https://api.kucoin.com')
+	except Exception:
+		market = None
+
+
+def get_klines(coin: str, tf_type: str):
+	"""Return klines for `coin` and timeframe `tf_type`.
+	If a kucoin `Market` client is available use it, otherwise call the
+	public REST API via `requests` and return the raw data list.
+	"""
+	if market is not None:
+		try:
+			return market.get_kline(coin, tf_type)
+		except Exception:
+			pass
+
+	# Fallback to REST public endpoint
+	try:
+		url = 'https://api.kucoin.com/api/v1/market/candles'
+		params = {'type': tf_type, 'symbol': coin}
+		resp = requests.get(url, params=params, timeout=10)
+		resp.raise_for_status()
+		data = resp.json()
+		# KuCoin REST returns list under 'data' key
+		return data.get('data') if isinstance(data, dict) else data
+	except Exception:
+		return []
 
 # -----------------------------
 # Robinhood market-data (current ASK), same source as rhcb.py trader:
@@ -397,7 +433,7 @@ def init_coin(sym: str):
 		history_list = []
 		while True:
 			try:
-				history = str(market.get_kline(coin, tf_choices[ind])).replace(']]', '], ').replace('[[', '[')
+				history = str(get_klines(coin, tf_choices[ind])).replace(']]', '], ').replace('[[', '[')
 				break
 			except Exception as e:
 				time.sleep(3.5)
@@ -553,7 +589,7 @@ def step_coin(sym: str):
 		history_list = []
 		while True:
 			try:
-				history = str(market.get_kline(coin, tf_choices[tf_choice_index])).replace(']]', '], ').replace('[[', '[')
+				history = str(get_klines(coin, tf_choices[tf_choice_index])).replace(']]', '], ').replace('[[', '[')
 				break
 			except Exception as e:
 				time.sleep(3.5)
@@ -781,7 +817,7 @@ def step_coin(sym: str):
 			while True:
 
 				try:
-					history = str(market.get_kline(coin, tf_choices[inder])).replace(']]', '], ').replace('[[', '[')
+					history = str(get_klines(coin, tf_choices[inder])).replace(']]', '], ').replace('[[', '[')
 					break
 				except Exception as e:
 					time.sleep(3.5)
@@ -1039,7 +1075,7 @@ def step_coin(sym: str):
 		while this_index_now < len(tf_update):
 			while True:
 				try:
-					history = str(market.get_kline(coin, tf_choices[this_index_now])).replace(']]', '], ').replace('[[', '[')
+					history = str(get_klines(coin, tf_choices[this_index_now])).replace(']]', '], ').replace('[[', '[')
 					break
 				except Exception as e:
 					time.sleep(3.5)

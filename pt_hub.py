@@ -3061,6 +3061,14 @@ class PowerTraderHub(tk.Tk):
         except Exception:
             pass
 
+        # Pass KuCoin usage flag to the runner process via env var so the
+        # runner can choose a safe fallback when the `kucoin` package is
+        # not available. Value is '1' (enabled) or '0' (disabled).
+        try:
+            os.environ["USE_KUCOIN_API"] = "1" if bool(self.settings.get("use_kucoin_api", True)) else "0"
+        except Exception:
+            pass
+
         self._start_process(self.proc_neural, log_q=self.runner_log_q, prefix="[RUNNER] ")
 
 
@@ -5139,41 +5147,42 @@ class PowerTraderHub(tk.Tk):
             ttk.Button(save_btns, text="Save", command=do_save).pack(side="left")
             ttk.Button(save_btns, text="Close", command=wiz.destroy).pack(side="left", padx=8)
 
-            # -----------------------------
-            # KuCoin API setup (simple wizard)
-            # -----------------------------
-            def _refresh_kucoin_status() -> None:
-                k, s, p = _read_kucoin_files()
-                try:
-                    enabled = bool(kucoin_var.get())
-                except Exception:
-                    enabled = bool(self.settings.get("use_kucoin_api", True))
+        # -----------------------------
+        # KuCoin API setup (simple wizard)
+        # -----------------------------
+        def _refresh_kucoin_status() -> None:
+            k, s, p = _read_kucoin_files()
+            try:
+                enabled = bool(kucoin_var.get())
+            except Exception:
+                enabled = bool(self.settings.get("use_kucoin_api", True))
 
-                if k and s and p and enabled:
-                    kucoin_status_var.set("Configured")
-                elif k or s or p:
-                    kucoin_status_var.set("Partial credentials")
-                else:
-                    kucoin_status_var.set("Not configured")
+            if k and s and p and enabled:
+                kucoin_status_var.set("Configured")
+            elif k or s or p:
+                kucoin_status_var.set("Partial credentials")
+            else:
+                # Leave empty so the Setup Wizard button is more prominent
+                kucoin_status_var.set("")
 
-            def _clear_kucoin_files() -> None:
-                k_path, s_path, p_path = _kucoin_paths()
-                try:
-                    for fp in (k_path, s_path, p_path):
-                        try:
-                            if os.path.isfile(fp):
-                                os.remove(fp)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                _refresh_kucoin_status()
+        def _clear_kucoin_files() -> None:
+            k_path, s_path, p_path = _kucoin_paths()
+            try:
+                for fp in (k_path, s_path, p_path):
+                    try:
+                        if os.path.isfile(fp):
+                            os.remove(fp)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            _refresh_kucoin_status()
 
-            def _open_kucoin_api_wizard() -> None:
-                try:
-                    import webbrowser
-                except Exception:
-                    webbrowser = None
+        def _open_kucoin_api_wizard() -> None:
+            try:
+                import webbrowser
+            except Exception:
+                webbrowser = None
 
                 try:
                     import requests
@@ -5254,37 +5263,107 @@ class PowerTraderHub(tk.Tk):
         api_row.grid(row=r, column=1, columnspan=2, sticky="ew", pady=6)
         api_row.columnconfigure(0, weight=1)
 
-        ttk.Label(api_row, textvariable=api_status_var).grid(row=0, column=0, sticky="w")
-        ttk.Button(api_row, text="Setup Wizard", command=_open_robinhood_api_wizard).grid(row=0, column=1, sticky="e", padx=(10, 0))
-        ttk.Button(api_row, text="Open Folder", command=_open_api_folder).grid(row=0, column=2, sticky="e", padx=(8, 0))
-        ttk.Button(api_row, text="Clear", command=_clear_api_files).grid(row=0, column=3, sticky="e", padx=(8, 0))
+        rb_checkbox = ttk.Checkbutton(api_row, variable=robinhood_var)
+        rb_checkbox.grid(row=0, column=0, sticky="w")
+        rb_setup_btn = ttk.Button(api_row, text="Setup Wizard", command=_open_robinhood_api_wizard)
+        rb_setup_btn.grid(row=0, column=1, sticky="w", padx=(6, 8))
+        rb_status_lbl = ttk.Label(api_row, textvariable=api_status_var)
+        rb_status_lbl.grid(row=0, column=2, sticky="w")
+        rb_open_btn = ttk.Button(api_row, text="Open Folder", command=_open_api_folder)
+        rb_open_btn.grid(row=0, column=3, sticky="e", padx=(8, 0))
+        rb_clear_btn = ttk.Button(api_row, text="Clear", command=_clear_api_files)
+        rb_clear_btn.grid(row=0, column=4, sticky="e", padx=(8, 0))
+        
 
         r += 1
 
-        # Robinhood API enable/disable
-        ttk.Label(frm, text="Enable Robinhood API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
-        ttk.Checkbutton(frm, text="", variable=robinhood_var).grid(row=r, column=1, sticky="w", pady=6)
-        # (single Robinhood setup wizard kept in the API row above)
         r += 1
 
         # KuCoin UI row
-        kucoin_status_var = tk.StringVar(value="Not configured")
+        # Show the Setup Wizard button more prominently when not configured by
+        # keeping the textual status empty by default.
+        kucoin_status_var = tk.StringVar(value="")
         ttk.Label(frm, text="KuCoin API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
 
         ku_row = ttk.Frame(frm)
         ku_row.grid(row=r, column=1, columnspan=2, sticky="ew", pady=6)
         ku_row.columnconfigure(0, weight=1)
 
-        ttk.Label(ku_row, textvariable=kucoin_status_var).grid(row=0, column=0, sticky="w")
-        ttk.Button(ku_row, text="Setup Wizard", command=_open_kucoin_api_wizard).grid(row=0, column=1, sticky="e", padx=(10, 0))
-        ttk.Button(ku_row, text="Open Folder", command=lambda: _open_in_file_manager(self.project_dir)).grid(row=0, column=2, sticky="e", padx=(8, 0))
-        ttk.Button(ku_row, text="Clear", command=_clear_kucoin_files).grid(row=0, column=3, sticky="e", padx=(8, 0))
+        # KuCoin checkbox inline with the status and setup controls
+        ku_checkbox = ttk.Checkbutton(ku_row, variable=kucoin_var)
+        ku_checkbox.grid(row=0, column=0, sticky="w")
+        ku_status_lbl = ttk.Label(ku_row, textvariable=kucoin_status_var)
+        ku_status_lbl.grid(row=0, column=1, sticky="w", padx=(6, 0))
+        # Use a small invoker so the button can be created even if the
+        # implementation isn't bound yet at runtime (avoid NameError).
+        def _kucoin_wizard_invoker():
+            try:
+                return _open_kucoin_api_wizard()
+            except Exception:
+                try:
+                    messagebox.showerror("Not available", "KuCoin setup wizard is not available right now.")
+                except Exception:
+                    pass
+
+        ku_setup_main_btn = ttk.Button(ku_row, text="Setup Wizard", command=_kucoin_wizard_invoker)
+        ku_setup_main_btn.grid(row=0, column=2, sticky="w", padx=(10, 0))
+        ku_open_main_btn = ttk.Button(ku_row, text="Open Folder", command=lambda: _open_in_file_manager(self.project_dir))
+        ku_open_main_btn.grid(row=0, column=3, sticky="e", padx=(8, 0))
+        ku_clear_main_btn = ttk.Button(ku_row, text="Clear", command=_clear_kucoin_files)
+        ku_clear_main_btn.grid(row=0, column=4, sticky="e", padx=(8, 0))
+        
 
         r += 1
 
         _refresh_kucoin_status()
 
         _refresh_api_status()
+
+        # Functions to hide/show API setup buttons when API enable checkboxes change
+        def _update_robinhood_buttons(*args):
+            try:
+                if bool(robinhood_var.get()):
+                    rb_setup_btn.grid()
+                    rb_open_btn.grid()
+                    rb_clear_btn.grid()
+                else:
+                    rb_setup_btn.grid_remove()
+                    rb_open_btn.grid_remove()
+                    rb_clear_btn.grid_remove()
+            except Exception:
+                pass
+
+        def _update_kucoin_buttons(*args):
+            try:
+                if bool(kucoin_var.get()):
+                    ku_setup_main_btn.grid()
+                    ku_open_main_btn.grid()
+                    ku_clear_main_btn.grid()
+                else:
+                    ku_setup_main_btn.grid_remove()
+                    ku_open_main_btn.grid_remove()
+                    ku_clear_main_btn.grid_remove()
+            except Exception:
+                pass
+
+        # Attach traces and run initial update to match current checkbox values
+        try:
+            robinhood_var.trace('w', _update_robinhood_buttons)
+        except Exception:
+            try:
+                robinhood_var.trace_add('write', _update_robinhood_buttons)
+            except Exception:
+                pass
+        try:
+            kucoin_var.trace('w', _update_kucoin_buttons)
+        except Exception:
+            try:
+                kucoin_var.trace_add('write', _update_kucoin_buttons)
+            except Exception:
+                pass
+
+        _update_robinhood_buttons()
+        _update_kucoin_buttons()
 
 
         ttk.Separator(frm, orient="horizontal").grid(row=r, column=0, columnspan=3, sticky="ew", pady=10); r += 1
@@ -5297,11 +5376,6 @@ class PowerTraderHub(tk.Tk):
         chk = ttk.Checkbutton(frm, text="Auto start scripts on GUI launch", variable=auto_start_var)
         chk.grid(row=r, column=0, columnspan=3, sticky="w", pady=(10, 0)); r += 1
 
-        # KuCoin API enable/disable
-        ttk.Label(frm, text="Enable KuCoin API:").grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
-        ttk.Checkbutton(frm, text="", variable=kucoin_var).grid(row=r, column=1, sticky="w", pady=6)
-        # duplicate KuCoin setup wizard for quick access
-        ttk.Button(frm, text="Setup Wizard", command=_open_kucoin_api_wizard).grid(row=r, column=2, sticky="e", padx=(8, 0))
         r += 1
 
         btns = ttk.Frame(frm)
