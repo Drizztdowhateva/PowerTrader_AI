@@ -15,6 +15,19 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 from pathlib import Path
 
+# Import API abstraction layer
+try:
+	from api_providers import (
+		create_trading_provider,
+		TradingProvider,
+		RobinhoodTrading
+	)
+	HAS_API_PROVIDERS = True
+except ImportError:
+	HAS_API_PROVIDERS = False
+	TradingProvider = None
+	RobinhoodTrading = None
+
 # -----------------------------
 # GUI HUB OUTPUTS
 # -----------------------------
@@ -176,11 +189,89 @@ if not API_KEY or not BASE64_PRIVATE_KEY:
     )
     raise SystemExit(1)
 
+
+def _get_trading_provider_from_settings() -> Optional['TradingProvider']:
+    """
+    Create a trading provider based on gui_settings.json or environment variables.
+    Falls back to Robinhood if not specified or on error.
+    """
+    if not HAS_API_PROVIDERS:
+        return None
+    
+    # Default to Robinhood
+    provider_name = "robinhood"
+    
+    # Try to read from gui_settings.json
+    try:
+        if os.path.isfile(_GUI_SETTINGS_PATH):
+            with open(_GUI_SETTINGS_PATH, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+                provider_name = settings.get("trading_provider", provider_name)
+    except Exception:
+        pass
+    
+    # Also check environment variable
+    provider_name = os.environ.get("TRADING_PROVIDER", provider_name).strip().lower()
+    
+    # Create provider based on name
+    try:
+        if provider_name == "robinhood":
+            return create_trading_provider(
+                "robinhood",
+                api_key=API_KEY,
+                private_key=BASE64_PRIVATE_KEY
+            )
+        elif provider_name in ["binance", "binance_us"]:
+            api_key = os.environ.get("BINANCE_API_KEY", "").strip()
+            api_secret = os.environ.get("BINANCE_API_SECRET", "").strip()
+            if not api_key or not api_secret:
+                print(f"[TRADER] Warning: {provider_name} selected but credentials not found in environment.")
+                print("[TRADER] Set BINANCE_API_KEY and BINANCE_API_SECRET environment variables.")
+                print("[TRADER] Falling back to Robinhood...")
+                return create_trading_provider("robinhood", api_key=API_KEY, private_key=BASE64_PRIVATE_KEY)
+            
+            use_us = (provider_name == "binance_us") or os.environ.get("BINANCE_USE_US", "").lower() in ("true", "1", "yes")
+            return create_trading_provider(
+                "binance",
+                api_key=api_key,
+                api_secret=api_secret,
+                use_us=use_us
+            )
+        elif provider_name == "coinbase":
+            api_key = os.environ.get("COINBASE_API_KEY", "").strip()
+            api_secret = os.environ.get("COINBASE_API_SECRET", "").strip()
+            if not api_key or not api_secret:
+                print(f"[TRADER] Warning: {provider_name} selected but credentials not found in environment.")
+                print("[TRADER] Set COINBASE_API_KEY and COINBASE_API_SECRET environment variables.")
+                print("[TRADER] Falling back to Robinhood...")
+                return create_trading_provider("robinhood", api_key=API_KEY, private_key=BASE64_PRIVATE_KEY)
+            
+            return create_trading_provider(
+                "coinbase",
+                api_key=api_key,
+                api_secret=api_secret
+            )
+        else:
+            print(f"[TRADER] Warning: Unknown trading provider '{provider_name}', using Robinhood.")
+            return create_trading_provider("robinhood", api_key=API_KEY, private_key=BASE64_PRIVATE_KEY)
+    except Exception as e:
+        print(f"[TRADER] Error creating trading provider '{provider_name}': {e}")
+        print("[TRADER] Falling back to Robinhood...")
+        try:
+            return create_trading_provider("robinhood", api_key=API_KEY, private_key=BASE64_PRIVATE_KEY)
+        except Exception:
+            return None
+
+
 class CryptoAPITrading:
     def __init__(self):
         # keep a copy of the folder map (same idea as trader.py)
         self.path_map = dict(base_paths)
 
+        # Try to use the new abstraction layer
+        self.trading_provider = _get_trading_provider_from_settings() if HAS_API_PROVIDERS else None
+        
+        # Keep original Robinhood implementation for backward compatibility
         self.api_key = API_KEY
         # Robustly decode the base64 private key: strip whitespace and fix padding
         _b64 = (BASE64_PRIVATE_KEY or "").strip()
@@ -197,6 +288,13 @@ class CryptoAPITrading:
             raise
         self.private_key = SigningKey(private_key_seed)
         self.base_url = "https://trading.robinhood.com"
+        
+        # Log which provider we're using
+        if self.trading_provider:
+            provider_class = self.trading_provider.__class__.__name__
+            print(f"[TRADER] Using trading provider: {provider_class}")
+        else:
+            print("[TRADER] Using legacy Robinhood implementation")
 
         self.dca_levels_triggered = {}  # Track DCA levels for each crypto
         self.dca_levels = [-2.5, -5.0, -10.0, -20.0, -30.0, -40.0, -50.0]  # Moved to instance variable

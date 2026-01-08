@@ -5541,6 +5541,39 @@ class PowerTraderHub(tk.Tk):
 
         ttk.Separator(frm, orient="horizontal").grid(row=r, column=0, columnspan=3, sticky="ew", pady=10); r += 1
 
+        # --- API Provider Selection ---
+        ttk.Label(frm, text="Market Data Provider:", foreground=DARK_FG).grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
+        
+        market_providers = ["kucoin", "binance", "binance_us", "coinbase", "coingecko"]
+        market_provider_var = tk.StringVar(value=self.settings.get("market_data_provider", "kucoin"))
+        market_dropdown = ttk.Combobox(frm, textvariable=market_provider_var, values=market_providers, state="readonly", width=15)
+        market_dropdown.grid(row=r, column=1, sticky="w", pady=6)
+        
+        ttk.Label(frm, text="(for candles/prices)", foreground=DARK_MUTED).grid(row=r, column=2, sticky="w", padx=(10, 0), pady=6)
+        r += 1
+        
+        ttk.Label(frm, text="Trading Provider:", foreground=DARK_FG).grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
+        
+        trading_providers = ["robinhood", "binance", "binance_us", "coinbase"]
+        trading_provider_var = tk.StringVar(value=self.settings.get("trading_provider", "robinhood"))
+        trading_dropdown = ttk.Combobox(frm, textvariable=trading_provider_var, values=trading_providers, state="readonly", width=15)
+        trading_dropdown.grid(row=r, column=1, sticky="w", pady=6)
+        
+        ttk.Label(frm, text="(for order execution)", foreground=DARK_MUTED).grid(row=r, column=2, sticky="w", padx=(10, 0), pady=6)
+        r += 1
+        
+        # Info label about provider configuration
+        provider_info = ttk.Label(
+            frm,
+            text="💡 See API_PROVIDERS_GUIDE.md for setup instructions for each provider",
+            foreground=DARK_MUTED,
+            wraplength=700
+        )
+        provider_info.grid(row=r, column=0, columnspan=3, sticky="w", pady=(4, 6))
+        r += 1
+
+        ttk.Separator(frm, orient="horizontal").grid(row=r, column=0, columnspan=3, sticky="ew", pady=10); r += 1
+
 
         add_row(r, "UI refresh seconds:", ui_refresh_var); r += 1
         add_row(r, "Chart refresh seconds:", chart_refresh_var); r += 1
@@ -5573,6 +5606,11 @@ class PowerTraderHub(tk.Tk):
                 self.settings["auto_start_scripts"] = bool(auto_start_var.get())
                 self.settings["use_kucoin_api"] = bool(kucoin_var.get())
                 self.settings["use_robinhood_api"] = bool(robinhood_var.get())
+                
+                # Save API provider selections
+                self.settings["market_data_provider"] = market_provider_var.get().strip()
+                self.settings["trading_provider"] = trading_provider_var.get().strip()
+                
                 self._save_settings()
 
                 # If new coin(s) were added and their training folder doesn't exist yet,

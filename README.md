@@ -1,6 +1,7 @@
 Fully automated crypto trading powered by a custom price prediction AI and a structured/tiered DCA system.
 
 ## Recent changes
+- **NEW**: Added support for multiple exchange APIs! Now supports KuCoin, Binance, Coinbase, and CoinGecko for market data, plus Binance and Coinbase for trading. See [API_PROVIDERS_GUIDE.md](API_PROVIDERS_GUIDE.md) for configuration details.
 - Fixed trainer status updates so the hub correctly shows which coin is actively training.
 - Streamlined path handling to be cross-platform (macOS / Linux / Windows).
 
@@ -161,8 +162,40 @@ A TRADE WILL START FOR A COIN IF THAT COIN REACHES A LONG LEVEL OF 3 OR HIGHER W
 1. Open **Settings**
 2. Add one new coin
 3. Save
-4. Click **Train All**, wait for training to comHere is a super clean version refined without stuckplete
+4. Click **Train All**, wait for training to complete
 5. Click **Start All**
+
+---
+
+## Using Different Exchange APIs
+
+PowerTrader AI supports multiple exchanges for market data and trading! By default, it uses:
+- **KuCoin** for market data (free, no API key needed)
+- **Robinhood** for trading (US-only)
+
+You can switch to other providers like **Binance**, **Coinbase**, or use **CoinGecko** as a fallback.
+
+### Quick Setup
+
+1. **Edit `gui_settings.json`** and add:
+   ```json
+   {
+     "market_data_provider": "binance",
+     "trading_provider": "robinhood"
+   }
+   ```
+
+2. **For trading with other exchanges**, set environment variables:
+   ```bash
+   export BINANCE_API_KEY="your_key"
+   export BINANCE_API_SECRET="your_secret"
+   ```
+
+For complete instructions on configuring different exchanges, see **[API_PROVIDERS_GUIDE.md](API_PROVIDERS_GUIDE.md)**.
+
+**Supported Providers:**
+- Market Data: KuCoin, Binance, Binance US, Coinbase, CoinGecko
+- Trading: Robinhood, Binance, Binance US, Coinbase
 
 ---
 

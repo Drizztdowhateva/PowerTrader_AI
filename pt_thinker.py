@@ -18,6 +18,16 @@ import uuid
 
 from nacl.signing import SigningKey
 
+# Import API abstraction layer
+try:
+	from api_providers import (
+		create_market_data_provider,
+		MarketDataProvider
+	)
+	HAS_API_PROVIDERS = True
+except ImportError:
+	HAS_API_PROVIDERS = False
+
 # Feature flag: allow the caller (GUI) to disable KuCoin usage.
 USE_KUCOIN = os.environ.get("USE_KUCOIN_API", "1").strip().lower() not in ("0", "false", "no")
 
@@ -32,12 +42,60 @@ if USE_KUCOIN:
 	except Exception:
 		market = None
 
+# Initialize market data provider from settings or environment
+_market_data_provider = None
+
+def _get_market_data_provider() -> 'MarketDataProvider':
+	"""Get the configured market data provider."""
+	global _market_data_provider
+	
+	if _market_data_provider is not None:
+		return _market_data_provider
+	
+	if not HAS_API_PROVIDERS:
+		return None
+	
+	# Read provider from environment or settings
+	provider_name = os.environ.get("MARKET_DATA_PROVIDER", "kucoin").strip().lower()
+	
+	# Try to read from gui_settings.json
+	try:
+		settings_path = os.path.join(os.path.dirname(__file__), "gui_settings.json")
+		if os.path.isfile(settings_path):
+			with open(settings_path, "r", encoding="utf-8") as f:
+				settings = json.load(f)
+				provider_name = settings.get("market_data_provider", provider_name)
+	except Exception:
+		pass
+	
+	try:
+		_market_data_provider = create_market_data_provider(provider_name)
+	except Exception:
+		# Fallback to KuCoin
+		try:
+			_market_data_provider = create_market_data_provider("kucoin")
+		except Exception:
+			_market_data_provider = None
+	
+	return _market_data_provider
+
 
 def get_klines(coin: str, tf_type: str):
 	"""Return klines for `coin` and timeframe `tf_type`.
-	If a kucoin `Market` client is available use it, otherwise call the
-	public REST API via `requests` and return the raw data list.
+	First tries the configured market data provider from api_providers.py,
+	then falls back to KuCoin (kucoin-python client or REST API).
 	"""
+	# Try new API abstraction layer first
+	provider = _get_market_data_provider()
+	if provider is not None:
+		try:
+			klines = provider.get_klines(coin, tf_type)
+			if klines:
+				return klines
+		except Exception:
+			pass
+	
+	# Fallback to original KuCoin implementation
 	if market is not None:
 		try:
 			return market.get_kline(coin, tf_type)
